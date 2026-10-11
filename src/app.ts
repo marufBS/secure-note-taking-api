@@ -6,7 +6,7 @@ app.use(express.json());
 
 app.get("/health",(req,res)=>{
     res.status(200).json({
-        status:"ok",
+        status:"ok.",
         message:"Secure Note-Taking API is running"
     })
 })
