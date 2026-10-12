@@ -16,11 +16,25 @@ const paginationSchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(10),
 });
 
+
+const interestsSchema = z
+    .array(z.string().trim().min(1).max(50))
+    .max(20)
+    .transform((interests) => [
+        ...new Map(
+            interests.map((interest) => [
+                interest.toLowerCase(),
+                interest,
+            ]),
+        ).values(),
+    ]);
+
 const createUserSchema = z.object({
     name: z.string().trim().min(2).max(100),
     email: z.string().trim().email().max(254),
     password: z.string().min(8).max(72),
     role: z.enum(["user", "admin"]).default("user"),
+    interest: interestsSchema.optional()
 });
 
 const updateUserSchema = z.object({
@@ -28,10 +42,13 @@ const updateUserSchema = z.object({
     email: z.string().trim().email().max(254).optional(),
     password: z.string().min(8).max(72).optional(),
     role: z.enum(["user", "admin"]).optional(),
+    interest: interestsSchema.optional()
 }).refine(
     (data) => Object.keys(data).length > 0,
     { message: "At least one field must be provided" }
 );
+
+
 
 export async function listUsersHandler(req: Request, res: Response): Promise<void> {
     const parsed = paginationSchema.safeParse(req.query);

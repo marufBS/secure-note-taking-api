@@ -8,93 +8,79 @@ interface PaginationPayload {
 }
 
 interface CreatePostPayload {
-  title: string;
-  content: string;
+    title: string;
+    content: string;
 }
 
 
-export async function createPost(  userId: string,  payload: CreatePostPayload) {
-  const post = await Post.create({
-    title: payload.title,
-    content: payload.content,
-    userId,
-  });
+export async function createPost(userId: string, payload: CreatePostPayload) {
+    const post = await Post.create({
+        title: payload.title,
+        content: payload.content,
+        userId,
+    });
 
-  return post;
+    return post;
 }
 
-export async function getUserPosts(userId: string, pagination: PaginationPayload) {
+
+
+export async function getUserPosts(pagination: PaginationPayload) {
     const { page, limit } = pagination;
     const skip = (page - 1) * limit;
 
-    const results = await User.aggregate([
+    const [result] = await Post.aggregate([
         {
-            $match: {
-                _id: new mongoose.Types.ObjectId(userId),
+            $lookup: {
+                from: "users",
+                localField: "userId",
+                foreignField: "_id",
+                as: "author",
             },
         },
         {
-            $lookup: {
-                from: "posts",
-                localField: "_id",
-                foreignField: "userId",
-                pipeline: [
+            $unwind: {
+                path: "$author",
+                preserveNullAndEmptyArrays: true,
+            },
+        },
+        {
+            $sort: { createdAt: -1 },
+        },
+        {
+            $facet: {
+                posts: [
+                    { $skip: skip },
+                    { $limit: limit },
                     {
-                        $facet: {
-                            data: [
-                                { $sort: { createdAt: -1 } },
-                                { $skip: skip },
-                                { $limit: limit },
-                            ],
-                            metadata: [
-                                { $count: "total" },
-                            ],
+                        $project: {
+                            title: 1,
+                            content: 1,
+                            userId: 1,
+                            createdAt: 1,
+                            updatedAt: 1,
+                            author: {
+                                _id: "$author._id",
+                                name: "$author.name",
+                                email: "$author.email",
+                            },
                         },
                     },
                 ],
-                as: "postResults",
-            },
-        },
-        {
-            $unwind: "$postResults",
-        },
-        {
-            $project: {
-                _id: 0,
-                user: {
-                    id: "$_id",
-                    name: "$name",
-                },
-                posts: "$postResults.data",
-                total: {
-                    $ifNull: [
-                        {
-                            $arrayElemAt: [
-                                "$postResults.metadata.total",
-                                0,
-                            ],
-                        },
-                        0,
-                    ],
-                },
+                metadata: [{ $count: "total" }],
             },
         },
     ]);
 
-    if (results.length === 0) {
-        return null;
-    }
-
-    const result = results[0];
+    const total = result?.metadata[0]?.total ?? 0;
 
     return {
-        user: result.user,
-        posts: result.posts,
+        posts: result?.posts ?? [],
         pagination: {
             page,
             limit,
-            total: result.total,
-            totalPages: Math.ceil(result.total / limit),
+            total,
+            totalPages: Math.ceil(total / limit),
         },
     };
 }
